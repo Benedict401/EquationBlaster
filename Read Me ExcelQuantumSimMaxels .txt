@@ -1,0 +1,14 @@
+Excel Quantum Sim Maxels is a teaching tool that teaches the basics of the matrix maths
+of Quantum Computing. 
+
+For it to work it needs to be in directory C:\ExcelQuantum on the host computer.
+
+Also to use the functionality of the file the MAXELS tab must be opened on the Excel
+Ribbon.
+
+After experimenting you can then build your own quantum circuits in Excel Quantum Sim V1.10;
+this does not need to be in any particular place as it does not modify the Ribbon.
+
+Enjoy. 
+
+USE AT YOUR OWN RISK.
