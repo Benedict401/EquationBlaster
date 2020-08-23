@@ -1,8 +1,19 @@
+//
+// NOTES
+//
+// Game relevant objective
 // So the plan is players collect terms in the exp expansion to approximate answers
 // We could use the same dynamic to scoop us cos x as opposed to sin x.
+//
+// 
 
-#define OLC_PGE_APPLICATION
+
+#define OLC_PGE_APPLICATION 
 #include "olcPixelGameEngine.h"
+#include <iostream>
+#include <fstream>
+#include <string>
+
 
 class bbPaginator : public olc::PixelGameEngine
 {
@@ -14,6 +25,23 @@ public:
 
 private:
 
+	//std::string wtwtch;
+
+	struct TitanQuestion
+	{
+		std::string RawField;
+		std::vector<std::string> Tokens;
+		std::string QuestionID;
+		std::string MetaQuestionText;
+		std::string MetaQuestionMath;
+		std::string CommonMistakes;
+		std::string AnswerQuantity;
+		std::string Units;
+		std::string BestTime;
+		std::string BestTimeStr;
+		std::string NumberOfAttemptsRevision;
+	};
+
 	struct sSpaceText
 	{
 		float x;
@@ -24,35 +52,53 @@ private:
 		std::string str;
 	};
 
-	//struct sContainedBracket
-	//{
-	//
-	//};
-
 	struct Bracket
 	{
 		// We are calling them Brackets because they are more general and various than just 'variable' brackets
 		int nId;
-		int nPositionOpeningBracket;
-		int nPositionClosingBracket;
-		int nPositionOfOpeningExponentialBracket;
-		int nPositionOfClosingExponentialBracket;
+		int nPosOBrac; //Position in StrToPaginate
+		int nPosCBrac;
+		int nPosOExpBrac;	//Position in StrToPaginate
+		int nPosCExpBrac;
 		int nDepthOfNesting;	//Exponent brackets will always be nested one deeper
 		bool bNewTerm = false;
-		int AggregateLengthAboveLine = 0;
-		int AggregateLengthBelowLine = 0;
+		int nAggLenAboveLine = 0;
+		int nAggLenBelowLine = 0;
+		int nAggLenAboveLineExp = 0;
+		int nAggLenBelowLineExp = 0;
+		int nTotalLength = 0;
+		int nTotalHeight = 0;
 		std::string sExponentialString; //Special cases {1} do nothing {-1} place 'under line'
+		bool bBracIsSurd = false;
+		std::vector<sSpaceText> PrePaginatedVar;
+		std::vector<sSpaceText> PrePaginatedExp;
 		std::vector<sSpaceText> PaginatedText;
 		std::vector<int> ContainedBrackets;
 		bool bPaginated = false;
 		bool bCopied = false;
-	};							//At this point we don't know exactly how to handle nesting
+		bool bEvaluated = false;
+		std::vector<float> Terms;
+		std::vector<float> TermsInExponent;
+		std::vector<float> TermsInVariable;
+		float fExponentEvaluation;
+		float fVariableEvaluation;
+		float fEvaluation;
+		sSpaceText stEvaluation;
+	};							
 
-	struct ExponentBracket
+
+	struct Expression
+	{
+		std::vector<Bracket> vecBrackets;
+		std::vector<sSpaceText> vecPaginatedText;
+	};
+
+
+	struct ExponentBracket		//Well this is interesting - not using this presently.
 	{
 		int nId;
-		int nPositionOpeningBracket;
-		int nPositionClosingBracket;
+		int nPosOBrac;
+		int nPosCBrac;
 		int nDepthOfNesting;
 	};
 
@@ -62,85 +108,156 @@ private:
 	std::string ScreenOutputFlag3 = "";
 	std::string ScreenOutputFlag4 = "";
 	std::string ScreenOutputFlag5 = "";
+	std::string ScreenOutputFlag6 = "";
+	std::string ScreenOutputFlag7 = "";
+
+	int WriteCounter = 0;
 
 	bool SomethingToDisplay = false;
+	bool EvaluationMade = false;
 	bool bPaused;
-	//OK some backwards engineering!
-	//Well that didn't work, it is something to do with the non standard function keys on my laptop.
-	//boolean KeyFound = false;
 	int nNumOpeningBrackets;
 	int nNumClosingBrackets;
 	int nNumBrackets;
-	int nDepthBracketNesting; //Maybe depth of nesting cane be counted purely from variable brackets
+	int nDepthBracketNesting; //Maybe depth of nesting can be counted purely from variable brackets
 	int nMaxDepthNesting;
 	int LoopCount;
 	int AggregateLen;		//We will use an integer for now
+	int DummyOffset = 0;	// This is a scaffolding measure.
 
 	std::string StrToPaginate;
+	std::string StrToPaginate1;
+	std::string StrToPaginate2;
+	std::string StrToPaginate3;
+	std::string StrToPaginate4;
+
+	std::string StrToEvaluate;
+	std::string StrToEvaluate1;
+	std::string StrToEvaluate2;
+	std::string StrToEvaluate3;
+	std::string StrToEvaluate4;
+
+
 	std::string IntroText;
 
-	std::vector<Bracket> vecBrackets; 
+	std::vector<Bracket> vecBrackets;
 	std::vector<sSpaceText> vecPaginatedText;
-	std::vector<std::string> vecInputStr;
+	std::vector<Expression> vecExpressions;
+	//std::vector<std::string> vecInputStr;
+
+	std::vector<TitanQuestion> Questions;
+	int NumQuestions = 0;
+	int SelectedQuestion = 0;
+	bool DisplayQuestion = false;
+
+	bool Paginating = true;
+
+	//
+	//	TextBox
+	//
+	
+	int bbTextBoxFont = 1;
+	int bbTextHeight = 0;
+	//int bbWordLength = 0;
+	//int bbLineLength = 0;
+	int bbTextBoxWidth = 400;
+	std::vector<std::string> vecbbTextBox;
+
+	bool DisplayDiagnostics = false;
+	std::vector<std::string> vecDiagnostics;
 
 public:
 	bool OnUserCreate() override
 	{
-		// Called once at the start, so create things here
-		//Right here we are not looking for an ultimately recursive general function
-		//We wish to expound on the properties of the exp function
+		// We wish to expound on the properties of the exp function
 		// Exp : is a function such that the product of two instances of the function
 		// governed by different variables is the same as one instance of the function
 		// goverened by those two variables summed.
 
-		//One Weber is that flux that linking a circuit of one turn produces an emf of
+		// One Weber is that flux that linking a circuit of one turn produces an emf of
 		// one volt if wachsen or schwinden in ein second.
+
+
+		std::fstream newfile;
+		// So if you write to a file what was in it previously is wiped
+
+
+		newfile.open("A2_BindingEnergy.txt", std::ios::in); //open a file to perform read operation using file object
+		if (newfile.is_open()) {   //checking whether the file is open
+			std::string tp;
+			while (getline(newfile, tp)) { //read data from file object and put it into string.
+			//	wtwtch += tp + " "; //print the data of the string
+				TitanQuestion Question;
+				//getline(newfile, tp);
+				//wtwtch += tp + " ";
+				Question.RawField = tp;
+				Questions.push_back(Question);
+				NumQuestions++;
+			}
+			newfile.close(); //close the file object.
+		}
+		ScreenOutputFlag7 = std::to_string(NumQuestions);
+		//newfile.open("tpoint.txt", std::ios::out);  // open a file to perform write operation using file object
+		//if (newfile.is_open()) //checking whether the file is open
+		//{
+		//	newfile << wtwtch + "\n";   //inserting text
+			//newfile << "3 Lines \n";
+		//	newfile.close();    //close the file object
+		//}
+		for (auto& bbQuestion : Questions)
+		{
+			RefineQuestion(bbQuestion);
+		}
+
 
 		bPaused = false;
 
 		IntroText = "Welcome Cadet. To escape the Universe we must find it's Null Space.";
-		
-		//StrToPaginate = "[[[1{1}]{1}]+[[x{1}]{1}]+[[x{2}][2!{-1}]{1}]+[[x{3}][3!{-1}]{1}]+[[x{4}][4!{-1}]{1}]{1}]";
-		
-		StrToPaginate = "[{1}[{1}[{1}1]]+[{1}[{1}x]]+[{1}[{2}x][{-1}2!]]+[{1}[{3}x][{-1}3!]]+[{1}[{4}x][{-1}4!]]]";
 
-		//StrToPaginate = "[{1}[{1}1]+[{1}x]+[{2}x][{-1}2!]+[{3}x][{-1}3!]+[{4}x][{-1}4!]]";
+		//
+		//	Strings to paginate
+		//
 
-		//StrToPaginate = "[{1}[{1}[{1}[{1}[{1}[{1}x]]]]]]"; //We want some way of counting two layers
-		// We want to search to see mutual enclosed brackets. ANSWER: Only copy once. 
+		//StrToPaginate1 = "[{1}[{1}1]+[{1}x]+[{2}x][{-1}2!]+[{3}x][{-1}3!]+[{4}x][{-1}4!]]";
+		StrToPaginate1 = "[{1}[{1}[{1}1]]+[{1}[{1}x]]+[{1}[{2}x][{-1}2!]]+[{1}[{3}x][{-1}3!]]+[{1}[{4}x][{-1}4!]]]";
 
-		//StrToPaginate = "[x{2}]";
+		//StrToPaginate2 = "[{1}[{[{1}x]}x]+[{[{[{1}x]}x]}x]]";
+		//StrToPaginate2 = "[{[{1}[{1}x]+[{1}y]]}x]";
+		//StrToPaginate2 = "[{1}[{2}x]]";
+		//StrToPaginate2 = "[{[{1}[{1}x]+[{1}y]]}[{1}[{1}z]]]";
+		//StrToPaginate2 = "[{[{1}[{1}[{1}1]]+[{1}[{1}x]]+[{1}[{2}x][{-1}2!]]+[{1}[{3}x][{-1}3!]]+[{1}[{4}x][{-1}4!]]]}[{1}x]]";
+		StrToPaginate2 = "[{1}[{1}[{1}[{1}1]]+[{1}[{1}x]]+[{1}[{2}x][{-1}2!]]+[{1}[{3}x][{-1}3!]]+[{1}[{4}x][{-1}4!]]]"
+						 "[{-1}[{1}[{1}1]]+[{1}[{1}x]]+[{1}[{2}x][{-1}2!]]+[{1}[{3}x][{-1}3!]]+[{1}[{4}x][{-1}4!]]]]";
 
-		//StrToPaginate = "[[x{2}][y{3}]{2}]";
-	
+
+		//StrToPaginate3 = "[{1}[{[{1}x]}y]+[{[{2}z]}a]]";
+		//StrToPaginate3 = "[{1}[{1}x]]";
+		//StrToPaginate3 = "[{[{1}[{1}y]]}[{1}x]]";
+		//StrToPaginate3 = "[{[{1}[{1}x][{-1}y]]}[{1}[{1}z]]]";
+		//StrToPaginate3 = "[{1}[{[{[{1}x]}[{1}x]]}[{1}x]]+[{1}[{1}x]]]";
+		//StrToPaginate3 = "[{1}[{1}[{1}x]][{1}[{1}[{1}x]]+[{1}[{1}y]]]]";
+		//StrToPaginate3 = "[{1}[{1}[{1}x]]([{1}[{1}[{1}x]]+[{1}[{1}y]]])]";
+		StrToPaginate3 = "[{1}[{1}[{1}[{1}x]]][{1}[{1}[{1}x]]+[{1}[{1}y]]]]";
+
+		//StrToPaginate4 = "[{[{1}x]}x]";
+		//StrToPaginate4 = "[{[{1}x]}[{1}x]]"
+		//StrToPaginate4 = "[{[{1}[{1}x]]}[{1}[{1}x]]]";
+		//StrToPaginate4 = "[{[{1}y]}[{1}[{1}x]]]";
+		//StrToPaginate4 = "[{[{1}[{1}[{1}x]]+[{1}[{1}y][{-1}z]]]}[{1}[{2}x]]]";
+		//StrToPaginate4 = "[{1}[{1}x][{-1}[{[{[{1}x]}[{1}x]]}[{1}x]]]]";
+		StrToPaginate4 = "[{1}[{1}[{1}[{1}1]]+[{1}[{1}x]]][{1}[{1}[{1}x]]]]";
+
+		//Initialise 
+		StrToPaginate = StrToPaginate1;
+
+		// ANSWER: Only copy once. 
+
 		//StrToPaginate = "[[[][]]]";
 		//StrToPaginate = "[[][][]]";
 
-		// So this is a [[[ ]]] series
-
-		// More brackets needed 
-		//				"+[x{5}][5!{-1}]+[x{6}][6!{-1}]+[x{7}][7!{-1}]"
-		//				"+[x{8}][8!{-1}]+[x{9}][9!{-1}]+[x{10}][10!{-1}]";
-
-		//StrToPaginate = "[1{1}]+[ln(2){1}][x{1}]+[ln(2){2}][x{2}][2!{-1}]"
-		//				"+[ln(2){3}}[x{3}][3!{-1}]+[ln(2){4}][x{4}][4!{-1}]"
-		//				"+[ln(2){5}}[x{5}][5!{-1}]+[ln(2){6}][x{6}][6!{-1}]"
-		//				"+[ln(2){7}}[x{7}][7!{-1}]+[ln(2){8}][x{8}][8!{-1}]"
-		//				"+[ln(2){9}}[x{9}][9!{-1}]+[ln(2){10}][x{10}][10!{-1}]";
-
-		//StrToPaginate = "[[[1{1}]{1}]+[[1{1}][[[1{1}]{1}]+[[1{1}][x{-1}]{1}]{-1}]{1}]{1}]";
-	
-		//Start simple physics boy
-		//StrToPaginate = "[[[1{1}]{1}] + [[x{1}]{1}]{1}]"
-		// or
-
-		//StrToPaginate = "[{1}[{1}[{1}1]]+[{1}[{1}x]]]";
-
 		//If we have the exponents at the front we can find where they are by counting forward
 
-		//consider
-		//StrToPaginate = "[{[{1}[{1}[{1}x]]]}[{1}[{1}[{1}1]] + [{1}[{1}x]]]" // 
-
+	
 		//So the triple bracket is significant
 		// [ variable ]
 		// [[ term (variables multiplying) ]]
@@ -148,17 +265,16 @@ public:
 
 		// [[[[ product of series (series multiplying) ]]]]
 
-		// This would imply that we would want the brackets at the left to inform 
+		// This would imply that we might want the brackets at the left to inform 
 		// paginator what is going on.
 
-		//Simpler physics boy
+		
 		//StrToPaginate = "[{1}[{1}[{2}x]]]"; //This begs the question how is this different from
 		//StrToPaginate = "[[[x{2}]{1}]{1}]"	//[{1}[{2}[{1}x]]] or [{2}[{1}[{1}x]]]
 		//StrToPaginate = "[x{2}]";			//Arguably in this instance there isn't a difference except
 											//we could have some policy of (()^2) or (())^2 for appropriate rigour 
 
-		//StrToPaginate = "[A{2}]";
-
+		
 		//Consider (1+x)x -> [{1}[{1}[{1}[{1}1]]+[{1}[{1}x]]][{1}[{1}[{1}x]]]]
 		//				  -> [[[[1{1}]{1}]+[[x{1}]{1}]{1}][[[x{1}]{1}]{1}]{1}]
 
@@ -167,106 +283,229 @@ public:
 		//		 [[[--------------------------]]]
 
 		//Consider		(  1  + x  )  ^   (  2  +  y  )
-		//			  [[[----------]] { [[[-----------]]] } ]
+		//			  [[[----------]] { [[[-----------]]] } ] //This is now backwards
 
 
 
-		//for (int i = 0; i < 10; i++)
-		///	vecInputStr.push_back("K" + std::to_string(i));
+		//
+		//	Strings to Evaluate
+		//
 
-		//std::string line = "GeeksForGeeks is a must try";
+		// So I think we want to include a vector of terms for each bracket
+		// The EvaluateBracket function determines which term the contained bracket is in
+		// and multiplies that term by the variable, we then sum all the terms at the end.
 
-		// Vector of string to save tokens 
-		//vector <string> tokens;
+		// Note to self, we still have not incorporated minus
 
+		// Also rather that bCopied we use bAggregated
+
+		//StrToEvaluate1 = "[{1}[{1}10]]";
+		StrToEvaluate1 = "[{1}[{1}50]+[{1}[{1}40][{1}20]]]";
+
+		StrToEvaluate2 = "[{1}[{1}10][{1}10]]";
+
+		//StrToEvaluate3 = "[{1}[{1}[{1}10]]+[{1}[{1}10]]]";
+		//StrToPaginate3 = "[{1}[{1}[{1}10]]+[{1}[{1}10]]]";
+		//StrToEvaluate3 = "[{1}[{[{1}[{1}1]]}10]]";
+		//StrToEvaluate3 = "[{1}[{[{1}[{1}1]]}[{1}10]]]";
+		StrToEvaluate3 = "[{1}[{[{1}[{1}1]]}[{1}[{1}10]]]]";
+
+		//StrToEvaluate4 = "[{1}[{-0.5}2]]";
+		StrToEvaluate4 = "[{1}[{[{1}[{1}[{1}3]]+[{1}[{1}4]]]}[{1}[{1}[{1}10]]+[{1}[{1}10]]]]]";
+
+
+		StrToEvaluate = StrToEvaluate1;
 
 		return true;
 	}
 
 	bool OnUserUpdate(float fElapsedTime) override
 	{
-		// called once per frame
-		//for (int x = 0; x < ScreenWidth(); x++)
-		//	for (int y = 0; y < ScreenHeight(); y++)
-		//		Draw(x, y, olc::Pixel(rand() % 255, rand() % 255, rand() % 255));
+		// Toggle between Pagination and Evaluation
+		if (GetKey(olc::E).bReleased)
+		{
+			Paginating = !Paginating;
+		}
 
-		
-		//Launch Pagination
+		// Display target str
 		if (GetKey(olc::L).bReleased)
 		{
-			//LaunchPagination(StrToPaginate);
-			LaunchPagination(StrToPaginate);
+			if (Paginating)
+			{
+				DisplayStrToPaginate(StrToPaginate);
+			}
+			else 
+			{
+				DisplayStrToPaginate(StrToEvaluate);
+			}
 		}
 
+		// Launch Paginator
 		if (GetKey(olc::K).bReleased)
 		{
-			Paginator1(StrToPaginate);
+			if (Paginating)
+			{
+				Paginator1(StrToPaginate);
+			}
+			else
+			{
+				Paginator1(StrToEvaluate);
+			}
 		}
 
-		if (GetKey(olc::J).bReleased)
-		{
-			LaunchPagination2(StrToPaginate);
-		}
-
+		//	Display intro
 		if (GetKey(olc::H).bReleased)
 		{
 			DisplayIntro(IntroText);
 		}
 
-		if (GetKey(olc::R).bReleased)
-		{
-			ScreenOutputFlag2 = std::to_string(bbRecursive(5));
-		}
-
-		if (GetKey(olc::T).bReleased)
-		{
-			ScreenOutputFlag2 = std::to_string(PaginatorR(StrToPaginate, 0));
-		}
-
+		//	Display pagination
 		if (GetKey(olc::D).bReleased)
 		{
-			if (SomethingToDisplay == true)
+			if (Paginating)
 			{
-				DisplayPagination();
+				if (SomethingToDisplay == true)
+				{
+					DisplayPagination();
+				}
+			}
+			else
+			{
+				if (EvaluationMade == true)
+				{
+					DisplayEvaluation();
+				}
 			}
 		}
 
-		//Lets have a go at pausing... wow pausing....
+		//	Lets have a go at pausing... wow pausing....
 		if (GetKey(olc::P).bReleased)
 		{
 			bPaused = !bPaused;
 		}
 
-		//Investigating user Input - this olc::SHIFT is just the number 55. Hope!
-		//if (GetKey(olc::SHIFT).bHeld)
-		//	if(GetKey(olc::B).bReleased)
-		//if (GetKey(olc::173).bReleased);
+		//	Reset - this will allow us to study different strings 
+		if (GetKey(olc::C).bReleased)
+		{
+			SomethingToDisplay = false;
+			EvaluationMade = false;
+			Reset();
+		}
 
-		//if (GetKey(olc::LEFT_SQUARE_BRACKET).bReleased)
-		//	KeyFound = true;
+		//	Swap string to paginate
+		if (GetKey(olc::K1).bReleased)
+		{
+			SomethingToDisplay = false;
+			EvaluationMade = false;
+			Reset();
+			if (Paginating)
+			{
+				StrToPaginate = StrToPaginate1;
+			}
+			else
+			{
+				StrToEvaluate = StrToEvaluate1;
+			}
+		}
+		if (GetKey(olc::K2).bReleased)
+		{
+			SomethingToDisplay = false;
+			EvaluationMade = false;
+			Reset();
+			if (Paginating)
+			{
+				StrToPaginate = StrToPaginate2;
+			}
+			else
+			{
+				StrToEvaluate = StrToEvaluate2;
+			}
+		}
+		if (GetKey(olc::K3).bReleased)
+		{
+			SomethingToDisplay = false;
+			EvaluationMade = false;
+			Reset();
+			if (Paginating)
+			{
+				StrToPaginate = StrToPaginate3;
+			}
+			else
+			{
+				StrToEvaluate = StrToEvaluate3;
+			}
+		}
+		if (GetKey(olc::K4).bReleased)
+		{
+			SomethingToDisplay = false;
+			EvaluationMade = false;
+			Reset();
+			if (Paginating)
+			{
+				StrToPaginate = StrToPaginate4;
+			}
+			else
+			{
+				StrToEvaluate = StrToEvaluate4;
+			}
+		}
+		if (GetKey(olc::Z).bReleased)
+		{
+			ScreenOutputFlag6 = "Length ";
+			for (Bracket brac : vecBrackets)
+			{
+				ScreenOutputFlag6 += std::to_string(brac.nId) +  " " + std::to_string(brac.nTotalLength) + " ";
+			}
+		}
+		if (GetKey(olc::X).bReleased)
+		{
+			ScreenOutputFlag6 = "Height ";
+			for (Bracket brac : vecBrackets)
+			{
+				ScreenOutputFlag6 += std::to_string(brac.nId) + " " + std::to_string(brac.nTotalHeight) + " ";
+			}
+		}
+		if (GetKey(olc::V).bReleased)
+		{
+			//ScreenOutputFlag7 += std::to_string(WriteCounter);
+			DisplayDiagnostics = !DisplayDiagnostics;
+		}
 
-		//if (GetKey(olc::HASH).bReleased)
-		//	KeyFound = true;
+		if (GetKey(olc::Q).bReleased)
+		{
+			SelectedQuestion++;
+			if (SelectedQuestion >= NumQuestions)
+			{
+				SelectedQuestion = 0;
+			}
+			
+		}
 
-		//if (GetKey(olc::C).bReleased)
-		//	KeyFound = false;
+		if (GetKey(olc::U).bReleased)
+		{
+			DisplayQuestion = !DisplayQuestion;
+		}
+		//DisplayQuestion = true;
 
+		if (GetKey(olc::T).bReleased)
+		{
+			bbTextBoxPopulate(GenerateVariables(Questions[SelectedQuestion].Tokens[1]));
+		} 
+		//	Do stuff
 		if (bPaused == false)
 		{
 			// Clear Screen
 			Clear(olc::BLACK);
 
-			//if (KeyFound == true)
-			//	Clear(olc::BLUE);
 
-			//Draw Paginated Text
+			// Draw Paginated Text
 			for (sSpaceText& sText : vecPaginatedText)
 			{
 				sText.x += sText.dx * fElapsedTime;
 				DrawString(sText.x, sText.y, sText.str, olc::WHITE, sText.nFontSize);
 			}
 
-			//Delete text after it has scrolled across screen
+			// Delete text after it has left screen
 			if (vecPaginatedText.size() > 0)
 			{
 				auto i = remove_if(vecPaginatedText.begin(), vecPaginatedText.end(),
@@ -275,19 +514,90 @@ public:
 					vecPaginatedText.erase(i, vecPaginatedText.end());
 			}
 
-			//Draw Pagination Parameters
+			//ScreenOutputFlag4 = wtwtch;
+
+			// Diagnostics
 			DrawString(50, 50, "Number Variable Brackets " + std::to_string(nNumBrackets), olc::WHITE, 2);
 			DrawString(50, 100, "Max Depth Variable Nesting " + std::to_string(nMaxDepthNesting), olc::WHITE, 2);
-			DrawString(50, 150, ScreenOutputFlag1, olc::WHITE, 2);
-			DrawString(50, 200, ScreenOutputFlag2, olc::WHITE, 2);
-			DrawString(50, 250, ScreenOutputFlag3, olc::WHITE, 2);
-			DrawString(50, 300, ScreenOutputFlag4, olc::WHITE, 2);
-			DrawString(50, 350, ScreenOutputFlag5, olc::WHITE, 2);
+			//DrawString(50, 150, ScreenOutputFlag1, olc::WHITE, 2);
+			//DrawString(50, 200, ScreenOutputFlag2, olc::WHITE, 2);
+			//DrawString(50, 250, ScreenOutputFlag3, olc::WHITE, 2);
+			//DrawString(50, 300, ScreenOutputFlag4, olc::WHITE, 2);
+			//DrawString(50, 350, ScreenOutputFlag5, olc::WHITE, 2);
+			//DrawString(50, 400, ScreenOutputFlag6, olc::WHITE, 2);
+			//DrawString(50, 450, ScreenOutputFlag7, olc::WHITE, 2);
+			
+			int bbOffset = 0;
+			//for (auto Question : Questions)
+			//{
+			//	DrawString(50, 150 + bbOffset, Question.RawField, olc::WHITE, 2);
+			//	bbOffset += 50;
+			//}
+
+			//for (auto a : Questions[1].Tokens)
+			//{
+			//	DrawString(50, 150 + bbOffset, a, olc::WHITE, 2);
+			//	bbOffset += 30;
+			//}
+			
+			if (DisplayQuestion == true)
+			{
+				for (std::string& a : Questions[SelectedQuestion].Tokens)
+				{
+					DrawString(50, 150 + bbOffset, a, olc::WHITE, 2);
+					bbOffset += 30;
+				}
+			}
+
+
+			if(DisplayDiagnostics == true)
+			{
+				bbOffset = 0;
+				for (std::string a : vecDiagnostics)
+				{
+					DrawString(800, 150 + bbOffset, a, olc::WHITE, 1);
+					bbOffset += 20;
+				}
+			}
+
+			//DrawString(50, 150, Questions[SelectedQuestion].QuestionID, olc::WHITE, 2);
+			//DrawString(50, 180, Questions[SelectedQuestion].MetaQuestionText, olc::WHITE, 2);
+			//DrawString(50, 210, Questions[SelectedQuestion].MetaQuestionMath, olc::WHITE, 2);
+			//DrawString(50, 240, Questions[SelectedQuestion].CommonMistakes, olc::WHITE, 2);
+			//DrawString(50, 270, Questions[SelectedQuestion].Units, olc::WHITE, 2);
+			//DrawString(50, 300, Questions[SelectedQuestion].AnswerQuantity, olc::WHITE, 2);
+			//DrawString(50, 330, Questions[SelectedQuestion].BestTime, olc::WHITE, 2);
+			//DrawString(50, 360, Questions[SelectedQuestion].BestTimeStr, olc::WHITE, 2);
+			//DrawString(50, 390, Questions[SelectedQuestion].NumberOfAttemptsRevision, olc::WHITE, 2);
+
+			bbOffset = 0;
+			for (std::string &bbLine : vecbbTextBox)
+			{
+				DrawString(50, 150 + bbOffset, bbLine, olc::WHITE, 1);
+				bbOffset += 20;
+			}
 		}
 
 
 		return true;
 	}
+
+	void Reset()
+	{
+		vecBrackets.clear();
+		vecPaginatedText.clear();
+		nNumBrackets = 0;
+		nMaxDepthNesting = 0;
+		ScreenOutputFlag1 = "";
+		ScreenOutputFlag2 = "";
+		ScreenOutputFlag3 = "";
+		ScreenOutputFlag4 = "";
+		ScreenOutputFlag5 = "";
+		ScreenOutputFlag6 = "";
+		ScreenOutputFlag7 = "";
+		WriteCounter = 0;
+	}
+
 
 	void DisplayIntro(std::string IntroText)
 	{
@@ -304,8 +614,6 @@ public:
 			for (char a : Word)
 				nLenToken++;
 
-
-			//Right so we are using font size 2 - so that should be 16 pixels
 			sSpaceText MyText;
 			MyText.str = Word;
 			MyText.nFontSize = 5;
@@ -314,15 +622,13 @@ public:
 			MyText.dx = -200;
 			vecPaginatedText.push_back(MyText);
 
-
 			nNumToken++;
 			AggregateLen += nLenToken;
 			nLenToken = 0;
-			
 		}
-
 	}
 
+	// Trial recursive function
 	int bbRecursive(int num)
 	{
 		if (num != 1)
@@ -335,44 +641,217 @@ public:
 		}
 	}
 
-	//	Right as we are presently flying blind let us have a display function
 	void DisplayPagination()
 	{
-		//for (Bracket brac : vecBrackets)
-		//{
-		//	for (sSpaceText PaginatedText : brac.PaginatedText)
-		//	{
-		//		vecPaginatedText.push_back(PaginatedText);
-		//	}
-		//}
-		//if (vecBrackets[0].PaginatedText.empty() == false)
-		//{
-			for (sSpaceText PaginatedText : vecBrackets[0].PaginatedText)
-			{
-				vecPaginatedText.push_back(PaginatedText);
-			}
-		//}
+		for (sSpaceText PaginatedText : vecBrackets[0].PaginatedText)
+		{
+			vecPaginatedText.push_back(PaginatedText);
+		}
 	}
 
-	// Right the overall paginate function is going to call itself while there is string left
-	// Now we want to find all the closing brackets.
+	void DisplayEvaluation()
+	{
+		sSpaceText MyEvaluation;
+		//for (auto a : vecBrackets)
+		//{
+		//	MyEvaluation.str += " " + std::to_string(a.fEvaluation);
+		//}
+		MyEvaluation.str = std::to_string(vecBrackets[0].fEvaluation);
+
+		//MyEvaluation.str = "Well Cap'n";
+		//ScreenOutputFlag5 = "Well Cap'n";
+		MyEvaluation.nFontSize = 2;
+
+		MyEvaluation.x = ScreenWidth();
+		MyEvaluation.y = ScreenHeight() / 2;
+		MyEvaluation.dx = -200;
+
+		vecPaginatedText.push_back(MyEvaluation);
+	}
+
+	std::string GenerateVariables(std::string bbQuestionStr)
+	{
+		vecDiagnostics.clear();
+		std::string bbQuestionVariablesGenerated;
+		bool InVariable = false;
+		bool InLowerBound = false;
+		bool InUpperBound = false;
+		bool InVariableName = false;
+		std::string sLowerBound;
+		std::string sUpperBound;
+		std::string VariableName;
+		float fLowerBound;
+		float fUpperBound;
+		float Value;
+
+		for (char a : bbQuestionStr)
+		{
+			if (InVariable == false) 
+			{
+				if (a == '<')
+				{
+					InVariable = true;
+					InLowerBound = true;
+				}
+				else
+				{
+					bbQuestionVariablesGenerated += a;
+				}
+
+			}
+			else
+			{
+				if (InLowerBound == true)
+				{
+					if (a != ':')
+					{
+						sLowerBound += a;
+					}
+					else
+					{
+						InLowerBound = false;
+						InUpperBound = true;
+					}
+				}
+				else
+				{
+					if (InUpperBound == true)
+					{
+						if (a != ':')
+						{
+							sUpperBound += a;
+						}
+						else
+						{
+							InUpperBound = false;
+							InVariableName = true;
+						}
+					}
+					else
+					{
+						//We should be in Variable Name
+						if (a != '>')
+						{
+							VariableName += a;
+						}
+						else
+						{
+							// This will need more work but I am drunk now.
+							bbQuestionVariablesGenerated += " 100 ";
+							InVariableName = false;
+							InVariable = false;
+						}
+					}
+				}
+			}
+		}
+		return bbQuestionVariablesGenerated;
+	}
+
+	void bbTextBoxPopulate(std::string bbText)
+	{
+		{
+			vecDiagnostics.clear();
+			vecbbTextBox.clear();
+			std::string bbWord;
+			std::string bbLine;
+			int bbWordLength = 0;
+			int bbLineLength = 0;
+			bbWord = "";
+			bbLine = "";
 
 
+			// If there is a word larger than the width of the text box that would probably need to be handled
+			for (char a : bbText)
+			{
+				//if (a != ' ' || a != '#')
+				//if (a != ' ' ||  '#')
+				//if (a != ' ')
+				//if (a != (' ' || '#'))
+				if (a != ' ')
+				{
+					if (a != '#')
+					{
+						bbWordLength += 8 * bbTextBoxFont;
+						if (bbWordLength >= bbTextBoxWidth)
+						{
+							vecbbTextBox.push_back(bbWord);
+							bbWord = a + " ";
+							bbWordLength = 2 * 8 * bbTextBoxFont;
+						}
+						else
+						{
+							bbWord += a;
+						}
+					}
+					else
+					{
+						bbLine += bbWord;
+						vecbbTextBox.push_back(bbLine);
+					}
+				}
+				else
+				{
+					bbLineLength += bbWordLength + 8 * bbTextBoxFont;
+					//vecDiagnostics.push_back("bbLineLength " + std::to_string(bbLineLength));
+					if (bbLineLength <= bbTextBoxWidth)
+					{
+						bbLine += bbWord + " ";
+					}
+					else
+					{
+						vecbbTextBox.push_back(bbLine);
+						bbLine = bbWord + " ";
+						bbLineLength = bbWordLength + 8 * bbTextBoxFont;
+						//vecDiagnostics.push_back("bbLineLength " + std::to_string(bbLineLength));
+					}
+					bbWord = "";
+					bbWordLength = 0;
+				}
+				//vecDiagnostics.push_back("bbLineLength " + std::to_string(bbLineLength));
+			}
+		}
+	}
+
+	void RefineQuestion(TitanQuestion& Question)
+	{
+		//std::string StrToRefineRemainder;
+		//StrToRefineRemainder = RawFieldStr.substr(1);
+		
+		std::string Token;
+		Token = "";
+		int TokenNum = 0;
+		for (char &a : Question.RawField)
+		{
+			Token += a;
+			//Token = "CUNT";
+			if (a == '#')
+			{
+				Question.Tokens.push_back(Token);
+				Token = "";
+				TokenNum++;
+			}
+		}
+
+		ScreenOutputFlag6 = std::to_string(TokenNum);
+		//Question.QuestionID = Question.Tokens[0];
+		//Question.MetaQuestionText = Question.Tokens[1];
+		//Question.MetaQuestionMath = Question.Tokens[2];
+		//Question.CommonMistakes = Question.Tokens[3];
+		//Question.AnswerQuantity = Question.Tokens[4];
+		//Question.Units = Question.Tokens[5];
+		//Question.BestTime = Question.Tokens[6];
+		//Question.BestTimeStr = Question.Tokens[7];
+		//Question.NumberOfAttemptsRevision = Question.Tokens[8];
+
+	}
+
+	// Another trial recursive function
 	int PaginatorR(std::string StrToPaginate, int numReached) //To start let us recursively count the length of the str
 	{
 		std::string StrToPaginateRemainder;
 
 		StrToPaginateRemainder = StrToPaginate.substr(1);
-
-		//if (numReached == 0)
-		//	ScreenOutputFlag3 = StrToPaginateRemainder;
-
-		//if (numReached == 1)
-		//	ScreenOutputFlag4 = StrToPaginateRemainder;
-
-		//if (numReached == 2)
-		//	ScreenOutputFlag5 = StrToPaginateRemainder;
-
 
 		//return numReached;
 		if (StrToPaginateRemainder != "")
@@ -387,9 +866,7 @@ public:
 
 	void Paginator1(std::string StrToPaginate)
 	{
-		//std::string intermediate;
-		//std::string Parsed;	//as s stands for struct we might just leave str identified by lack of identifier
-
+		
 		nNumOpeningBrackets = 0;
 		nNumClosingBrackets = 0;
 		nNumBrackets = 0;
@@ -397,33 +874,27 @@ public:
 		nMaxDepthNesting = 0;
 		int nPositionInStr = 0;
 
-		//std::string bbVariableItIsAnX;
-		//std::string bbPowerItIsA2;
+		vecDiagnostics.clear();
 
-
-		//Parsed = "";
-
-		//Check For Consistency - actually this is more nuanced because there are other ways
-		//The brackets might be inconsisten ]][[ for instance...interesting consideration: 
-		//with equal numbers of brackets if you allow wrapping round of the string is there a defined
-		//outcome for each bracket, one immagines there would be, how do multiple failures manifest
-		//if there are unequal numbers of brackets? Anyway.
+		// Check For Consistency - actually this is more nuanced because there are other ways
+		// the brackets might be inconsisten ]][[ for instance...interesting consideration: 
+		// with equal numbers of brackets if you allow wrapping round of the string is there a defined
+		// outcome for each bracket, one imagines there would be, how do multiple failures manifest
+		// if there are unequal numbers of brackets? Anyway.
 
 		for (char a : StrToPaginate)
 		{
 			if (a == '[')
 			{
 				Bracket bbBracket;
-
-				bbBracket.nPositionOpeningBracket = nPositionInStr;
+				bbBracket.nPosOBrac = nPositionInStr;
+				bbBracket.nPosOExpBrac = nPositionInStr + 1;
 				bbBracket.nDepthOfNesting = nDepthBracketNesting;
 				bbBracket.nId = nNumBrackets;
 				nNumOpeningBrackets++;
 				nNumBrackets++;
 				nDepthBracketNesting++;	//Well we have identified some things
-
 				vecBrackets.push_back(bbBracket);
-
 			}
 			if (a == ']')
 			{
@@ -443,14 +914,20 @@ public:
 			return;
 		}
 
-		//Find Closing Brackets
+		// Find Closing Brackets
 		for (Bracket& brac : vecBrackets)
 		{
 			FindClosingBracket(brac, StrToPaginate);
 		}
 
+		// Find Position Closing Exponential Bracket
+		for (Bracket& brac : vecBrackets)
+		{
+			FindClosingExponentialBracket(brac, StrToPaginate);
+		}
+
 		//Find if new term
-		int nTermCount = 0;		// This is just to check it works
+		int nTermCount = 0;		
 		for (Bracket& brac : vecBrackets)
 		{
 			if (brac.nId != 0)
@@ -463,15 +940,15 @@ public:
 			}
 		}
 
-		ScreenOutputFlag5 = "We have " + std::to_string(nTermCount) + " terms Cap'n";
+		//ScreenOutputFlag5 = "We have " + std::to_string(nTermCount) + " terms Cap'n";
 
-		//Find contained Brackets - arguably this cound be done as part of finding closing bracket
+		//Find contained Brackets 
 		for (Bracket& bracOuter : vecBrackets)
 		{
-			//FindEnclosedBrackets(brac, StrToPaginate);
+			// Find enclosedBrackets(brac, StrToPaginate);
 			for (Bracket bracInner : vecBrackets)
 			{
-				if ((bracInner.nPositionOpeningBracket > bracOuter.nPositionOpeningBracket) and (bracInner.nPositionOpeningBracket < bracOuter.nPositionClosingBracket))
+				if ((bracInner.nPosOBrac > bracOuter.nPosOBrac) and (bracInner.nPosOBrac < bracOuter.nPosCBrac))
 					bracOuter.ContainedBrackets.push_back(bracInner.nId);
 			}
 		}
@@ -482,62 +959,33 @@ public:
 		for (auto a : vecBrackets[0].ContainedBrackets)
 			ScreenOutputFlag1 += std::to_string(a) + " ";
 		
-		//for (auto a : vecBrackets[1].ContainedBrackets)
-		//	ScreenOutputFlag2 += std::to_string(a) + " ";
+		ScreenOutputFlag2 = "Pagination order ";	//This is updated in PaginateExpression
+		
 
-		//Right now we want to go to the first bracket; then go to the first bracket it contains recursively
-		//If the bracket does not contain anything we want to paginate it and return to the next bracket up
-
-		//ScreenOutputFlag3 = std::to_string(FindFirstTerminalBracket(vecBrackets[0]));
-		//PaginateBracket(vecBrackets[FindFirstTerminalBracket(vecBrackets[0])], StrToPaginate);
-
-		PaginateExpression(vecBrackets[0], StrToPaginate);
-#
-		ScreenOutputFlag2 = "Loop count " + std::to_string(LoopCount);
-
-		//Here is a question, will everything be enclosed in an World/Expression Bracket? Might make it simpler.
-		//Then vecBrackets[0] would be the Expression Bracket.
+		// Well this is some spaghetti code
+		if(Paginating)
+		{ 
+			PaginateExpression(vecBrackets[0], StrToPaginate);
+			SomethingToDisplay = true;
+		}
+		else
+		{
+			EvaluateExpression(vecBrackets[0], StrToPaginate);
+			EvaluationMade = true;
+			ScreenOutputFlag2 = std::to_string(vecBrackets[0].fEvaluation);
+		}
 
 		//Also we need to perform a check on the bracket to see if it is a new term - look left for a '+'.
 
-
-		// 
-		SomethingToDisplay = true;
-
-
-
-		//for (Bracket& brac: vecBrackets)
-		//{
-		//	ScreenOutputFlag1 += "Brac " + std::to_string(brac.nId) + " at "
-		//		+ std::to_string(brac.nPositionOpeningBracket) + " to " 
-		//		+ std::to_string(brac.nPositionClosingBracket) + " ";
-		//}
-
-		//Rightso; the aim of the game here is to add brackets to vecBrackets
-		//What we wish to do is to find the closing bracket for every opening bracket
-		//This looks like it would be a factorial time problem?
-
-		//Just get the x and the 2 and paginate them bellend.
-		//bbVariableItIsAnX = StrToPaginate.substr(1, 1);
-		//bbPowerItIsA2 = StrToPaginate.substr(3, 1);
-
-		//Looks like we want to parse all least deeply nested '+' to a tagged value so we can then
-		// tokenize - and we can only use one character at a time.... also this brings up negatives
-		// and other dimensions like i IJK; 
-
-		//Actually a vector of pointers to the appropriate '+' will allow us to cut it up ourselves
-		//Also looks like we need more brackets - if everything is bracketed properly then once
-		//we get a lump of anything we should always be able to put it into our bracket data structure.
-
-		//So the aim is to work from the leftmost deepest nested bracket until that is the outer bracket
-		//and we are finished
+		// Allow display as there is something to display
+		
 	}
 
 	void FindClosingBracket(Bracket& ConsideredBracket, std::string StrToPaginate)
 	{
 		std::string StrToPaginateRemainder;
 
-		StrToPaginateRemainder = StrToPaginate.substr(ConsideredBracket.nPositionOpeningBracket);
+		StrToPaginateRemainder = StrToPaginate.substr(ConsideredBracket.nPosOBrac);
 
 		nDepthBracketNesting = 0;
 		int nPositionInStr = 0;
@@ -553,265 +1001,288 @@ public:
 				nDepthBracketNesting--;
 				if (nDepthBracketNesting == 0)
 				{
-					ConsideredBracket.nPositionClosingBracket = ConsideredBracket.nPositionOpeningBracket + nPositionInStr;
+					ConsideredBracket.nPosCBrac = ConsideredBracket.nPosOBrac + nPositionInStr;
 					return;
 				}
 			}
 			nPositionInStr++;
 		}
-	
 	}
 
-	void FindEnclosedBrackets(Bracket ConsideredBracket, std::string StrToPaginate)
+	void FindClosingExponentialBracket(Bracket& ConsideredBracket, std::string StrToPaginate)
 	{
-		//Actually this str information contains no refernce to the enclosed brackets.
-		std::string EnclosedStr;
+		std::string StrToPaginateRemainder;
 
-		int LenEnclosedStr = ConsideredBracket.nPositionClosingBracket - ConsideredBracket.nPositionOpeningBracket;
+		StrToPaginateRemainder = StrToPaginate.substr(ConsideredBracket.nPosOBrac);
 
-		EnclosedStr = StrToPaginate.substr(ConsideredBracket.nPositionOpeningBracket +1 , LenEnclosedStr -1);
-
-		if (ConsideredBracket.nId == 0)
-			ScreenOutputFlag2 = EnclosedStr;
-
-		if (ConsideredBracket.nId == 1)
-			ScreenOutputFlag3 = EnclosedStr;
-
-		if (ConsideredBracket.nId == 2)
-			ScreenOutputFlag4 = EnclosedStr;
-
-		return;
+		nDepthBracketNesting = 0;
+		int nPositionInStr = 0;
+		// So when we hit a closing brackt and our depth of nesting is zero we have found closing bracket
+		for (char a : StrToPaginateRemainder)
+		{
+			if (a == '{')
+			{
+				nDepthBracketNesting++;
+			}
+			if (a == '}')
+			{
+				nDepthBracketNesting--;
+				if (nDepthBracketNesting == 0)
+				{
+					ConsideredBracket.nPosCExpBrac = ConsideredBracket.nPosOBrac + nPositionInStr;
+					return;
+				}
+			}
+			nPositionInStr++;
+		}
 	}
-
+	
 	bool IsNewTerm(Bracket& brac, std::string StrToPaginate)
 	{
-		if (StrToPaginate[brac.nPositionOpeningBracket - 1] == '+')
+		if (StrToPaginate[brac.nPosOBrac - 1] == '+')
 		{
-			//brac.bNewTerm = true;	// This is an interrogator function so it should nto make changes
-			//ScreenOutputFlag5 += " Cap'n " + StrToPaginate[brac.nPositionOpeningBracket - 1];
 			return true;
 		}
 		else
 		{
-			//ScreenOutputFlag5 = ScreenOutputFlag5 + " False Cap'n " + StrToPaginate[brac.nPositionOpeningBracket - 1];
 			return false;
 		}
 	}
 
-
 	// We want functions to check if a First Terminal Bracket exists - here we are relying on their being one
 	// we also want to check if that bracket is paginated.
+	//int FindFirstTerminalBracket(Bracket& brac)
+	//{
+	//	if(brac.ContainedBrackets.empty() == true)
+	//	{
+	//		return brac.nId;
+	//	}
+	//	else
+	//	{
+	//		return FindFirstTerminalBracket(vecBrackets[brac.ContainedBrackets[0]]);
+	//	}
+	//}
 
-	
-	int FindFirstTerminalBracket(Bracket& brac)
-	{
-		if(brac.ContainedBrackets.empty() == true)
-		{
-			return brac.nId;
-		}
-		else
-		{
-			return FindFirstTerminalBracket(vecBrackets[brac.ContainedBrackets[0]]);
-		}
-	}
+	//bool  IsBracketInExponential()
+	//{
+	//
+	//	return false;
+	//}
 
 	void PaginateBracket(Bracket& brac, std::string StrToPaginate)
 	{
-		 
-		//This wants to look at the bracs it contains, due to our recursive function they should all be
-		//Paginated if we are attempting to paginate the bracket
-		//We can also check if the paginated brackets are in the bracket's expontent or not
-		//CHECK: if paginated brackets are in exponent - this will be done by finding location of exponent
-		//brackets {} we can either count backwards or we can put the exponent at the front of the str.
-
-		//Lets just do something
-		std::string BracketStr;
-
-		int bbCounter = 0;
-		//int nExponentBrackets = 0;
-		//int nStartOfExponent;
-		bool EndExponentFound = false;
-		int nEndOfExponent;
-
+		//std::string BracketStr;
 		std::string VarString;
 		std::string ExponentStr;
+		int nLenExpStr;
+		int nLenVarStr;
 
-		BracketStr = StrToPaginate.substr(brac.nPositionOpeningBracket, brac.nPositionClosingBracket - brac.nPositionOpeningBracket);
+		//Arguably this should be inside the if clause below
+		nLenExpStr = brac.nPosCExpBrac - (brac.nPosOExpBrac + 1);
+		brac.sExponentialString = StrToPaginate.substr(brac.nPosOExpBrac + 1, nLenExpStr);
 
-		// Right we are going ot be working forwards
-
-		for (char a : BracketStr)
+		//
+		//	Case of a terminal bracket
+		//
+		if (brac.ContainedBrackets.empty() == true)
 		{
-			if (a == '}')
+			//
+			//	Paginate Variable
+			//
+
+			nLenVarStr = brac.nPosCBrac - (brac.nPosCExpBrac + 1);
+			VarString = StrToPaginate.substr(brac.nPosCExpBrac + 1, nLenVarStr);
+
+			sSpaceText MyVar;
+			MyVar.str = VarString;
+			MyVar.nFontSize = 2;
+
+			MyVar.x = ScreenWidth();
+			MyVar.y = ScreenHeight() / 2;
+			MyVar.dx = -200;
+			brac.PaginatedText.push_back(MyVar);
+			brac.nAggLenAboveLine += (8 * MyVar.nFontSize * nLenVarStr);
+			brac.nTotalHeight = 8 * MyVar.nFontSize;
+			//
+			//
+			//	Paginate Exponent
+			//
+
+			ExponentStr = brac.sExponentialString;
+
+			// Case of special exponents
+			if (ExponentStr != "1")
 			{
-				if (EndExponentFound == false)
-				{
-					nEndOfExponent = bbCounter;
-					EndExponentFound = true;
-				}
-				
-			}
-			bbCounter++;
-		}
-
-		//for (char a : BracketStr)
-		//{
-		//	if (a == '{')
-		//	{
-		//		nExponentBrackets++;
-		//		nStartOfExponent = bbCounter;	//If this works there should only be one instance of '{' 
-		//										//in the string.
-		//	}
-		//	bbCounter++;
-		//}
-
-		//brac.sExponentialString = BracketStr.substr(nStartOfExponent + 1, (bbCounter - nStartOfExponent) - 2);
-		brac.sExponentialString = BracketStr.substr(2, nEndOfExponent-2);
-
-		if (brac.ContainedBrackets.empty() == true)	//Case it is a terminal bracket
-		{
-
-			//Right for now we want to change the behaviour if we encounter more than one '{'
-			//This highlights a thorny issue or how we apply this term exponent.
-			//So here what we want to do is store pagination information in paginated brackets
-			//Then when we have an outer bracket it goes back and looks at this information and 
-			//acts appropriately.
-
-			//ScreenOutputFlag4 += " " + std::to_string(nEndOfExponent);
-			ScreenOutputFlag4 += " " + BracketStr.substr(2, nEndOfExponent - 2);
-
-			//if (nExponentBrackets == 1) // This is the case for a terminal bracket
-										
-			//{
-				//VarString = BracketStr.substr(1, nStartOfExponent - 1);
-				VarString = BracketStr.substr(nEndOfExponent+1, bbCounter);
-				//ExponentStr = BracketStr.substr(nStartOfExponent + 1, (bbCounter - nStartOfExponent) - 2);
-				ExponentStr = BracketStr.substr(2, nEndOfExponent - 2);
-
-				//This is one of the most important variables
-				//int AggregateLen = 0;
-
-				sSpaceText MyVar;
-				MyVar.str = VarString;
-				MyVar.nFontSize = 5;
-
-				if (brac.sExponentialString != "-1")
-				{
-					MyVar.x = ScreenWidth() + brac.AggregateLengthAboveLine;
-					MyVar.y = ScreenHeight() / 2;
-					MyVar.dx = -200;
-					//vecPaginatedText.push_back(MyVar);
-					brac.AggregateLengthAboveLine += (4 * MyVar.nFontSize * (bbCounter - nEndOfExponent));
-				}
-				else
-				{
-					MyVar.x = ScreenWidth() + brac.AggregateLengthBelowLine;
-					MyVar.y = (ScreenHeight() / 2) +100;
-					MyVar.dx = -200;
-					brac.AggregateLengthBelowLine += (4 * MyVar.nFontSize * (bbCounter - nEndOfExponent));
-				}
-				brac.PaginatedText.push_back(MyVar);
-				//Botch for now
-				//AggregateLen += (4 * MyVar.nFontSize * (bbCounter - nEndOfExponent));
-
-				//While engaged in useful botching - we only want to do this if the exponent is other than 1
-				if (ExponentStr != "1")
+				if (ExponentStr != "-1")
 				{
 					sSpaceText MyExp;
 					MyExp.str = ExponentStr;
-					MyExp.nFontSize = 4;
-					if (ExponentStr != "-1")
+					MyExp.nFontSize = 2;
+
+					MyExp.x = ScreenWidth() + brac.nAggLenAboveLine;
+					MyExp.y = (ScreenHeight() / 2) - (brac.nTotalHeight / 2);
+					MyExp.dx = -200;
+					brac.PaginatedText.push_back(MyExp);
+					brac.nAggLenAboveLine += (8 * MyVar.nFontSize * nLenExpStr);
+					brac.nTotalHeight += (brac.nTotalHeight / 2);
+				}
+			}
+			brac.nTotalLength = brac.nAggLenAboveLine + 16;	// This should be the case here, will be different for
+														// non-terminal brackets
+		}
+
+		//
+		//	Handle internal paginated brackets
+		//
+	
+		for (int bracId : brac.ContainedBrackets)
+		{
+			if (vecBrackets[bracId].bCopied == false)
+			{
+				if (vecBrackets[bracId].nTotalHeight > brac.nTotalHeight)
+				{
+					brac.nTotalHeight = vecBrackets[bracId].nTotalHeight;
+				}
+
+				// Is bracket in Exponent?
+				if (vecBrackets[bracId].nPosCBrac < brac.nPosCExpBrac)
+				{
+					//
+					// Pre-Paginate Exponent
+					//
+
+					if (vecBrackets[bracId].bNewTerm == true)
 					{
-						MyExp.x = ScreenWidth() + brac.AggregateLengthAboveLine;
-						MyExp.y = (ScreenHeight() / 2) - 16;
-						MyExp.dx = -200;
-						//vecPaginatedText.push_back(MyExp);
-						brac.AggregateLengthAboveLine += (4 * 4) * nEndOfExponent;
+						//	Add a plus - ah, at this point we don't know how big the Term is 
+						sSpaceText Plus;
+						Plus.str = "+";
+						Plus.nFontSize = 2;
+						Plus.x = ScreenWidth() + brac.nAggLenAboveLineExp;
+						Plus.y = (ScreenHeight() / 2); // -vecBrackets[bracId].nTotalHeight / 2;
+						Plus.dx = -200;
+						brac.PrePaginatedExp.push_back(Plus);
+						brac.nAggLenAboveLineExp += 30;
+						brac.nAggLenBelowLineExp += 30;
+					}
+
+					if (vecBrackets[bracId].sExponentialString != "-1")
+					{
+						for (sSpaceText PrePaginated : vecBrackets[bracId].PaginatedText)
+							{
+								PrePaginated.x += brac.nAggLenAboveLineExp;
+								brac.PrePaginatedExp.push_back(PrePaginated);
+							}
+						brac.nAggLenAboveLineExp += vecBrackets[bracId].nTotalLength;
 					}
 					else
 					{
-						MyExp.x = ScreenWidth() + brac.AggregateLengthBelowLine;
-						MyExp.y = (ScreenHeight() / 2) - 16;
-						MyExp.dx = -200;
-						//vecPaginatedText.push_back(MyExp);
-						brac.AggregateLengthBelowLine += (4 * 4) * nEndOfExponent;
+						for (sSpaceText PrePaginated : vecBrackets[bracId].PaginatedText)
+						{
+							PrePaginated.x += brac.nAggLenBelowLineExp;
+							PrePaginated.y += brac.nTotalHeight;
+							brac.PrePaginatedExp.push_back(PrePaginated);
+						}
+						brac.nAggLenBelowLineExp += vecBrackets[bracId].nTotalLength;
 					}
-					brac.PaginatedText.push_back(MyExp);
 				}
-					
-				//brac.AggregateLengthAboveLine += (4 * 4) * 5;
-				//brac.AggregateLengthBelowLine += (4 * 4) * 5;
+				else
+				//
+				// PrePaginate 'Variable' -- this could actually be a variable or a series of terms.
+				//
+				{
+					if (vecBrackets[bracId].bNewTerm == true)
+					{
+						//	Add a plus
+						sSpaceText Plus;
+						Plus.str = "+";
+						Plus.nFontSize = 2;
+						Plus.x = ScreenWidth() + brac.nAggLenAboveLine;
+						Plus.y = (ScreenHeight() / 2); //+ vecBrackets[bracId].nTotalHeight / 2;
+						Plus.dx = -200;
+						brac.PaginatedText.push_back(Plus);
+						brac.nAggLenAboveLine += 30;
+						brac.nAggLenBelowLine += 30;
+					}
 
-			//}
-			// Set Bracket Pagination to true - OK we seem to be doing this twice
-			brac.bPaginated = true;
+					if (vecBrackets[bracId].sExponentialString != "-1")
+					{
+						for (sSpaceText PrePaginated : vecBrackets[bracId].PaginatedText)
+						{
+							PrePaginated.x += brac.nAggLenAboveLine;
+							brac.PrePaginatedVar.push_back(PrePaginated);
+						}
+						brac.nAggLenAboveLine += vecBrackets[bracId].nTotalLength;
+					}
+					else
+					{
+						brac.bBracIsSurd = true;
+						for (sSpaceText PrePaginated : vecBrackets[bracId].PaginatedText)
+						{
+							PrePaginated.y += brac.nTotalHeight;
+							PrePaginated.x += brac.nAggLenBelowLine;
+							brac.PrePaginatedVar.push_back(PrePaginated);
+						}
+						brac.nAggLenBelowLine += vecBrackets[bracId].nTotalLength;
+						brac.nTotalHeight += brac.nTotalHeight + 8;
+					}
+				}
+		
+				if (brac.nAggLenAboveLine > brac.nAggLenBelowLine)
+				{
+					brac.nTotalLength = brac.nAggLenAboveLine;
+				}
+				else
+				{
+					brac.nTotalLength = brac.nAggLenBelowLine;
+				}
+
+				vecBrackets[bracId].bCopied = true;
+			}
+
+		}
+
+		//
+		// Paginate variable
+		//
+		if (brac.bBracIsSurd == false)
+		{
+			for (sSpaceText PrePaginated : brac.PrePaginatedVar)
+			{
+				brac.PaginatedText.push_back(PrePaginated);
+			}
 		}
 		else
 		{
-			//Handle internal paginated brackets
-			//Right, plan is to only handle the exponents in the surrounding brackets
-			//Right there is probably more to this but the plan of attack is to transfer
-			// all the paginated text in the contained brackets to the the containing bracket
-			// and add more formatting - under the line action!
-			// OK we only want ot put things under the line if their exponent is -1
-
-			//Right here is the nub of the issue; we only want to add the text once
-			//Triple brackets and higher give multiple instances of the same text
-
-			for (int bracId : brac.ContainedBrackets)
+			for (sSpaceText PrePaginated : brac.PrePaginatedVar)
 			{
-				if(vecBrackets[bracId].bCopied == false)
-				{
-					if (vecBrackets[bracId].sExponentialString == "-1")
-					{
-						for (sSpaceText PrePaginated : vecBrackets[bracId].PaginatedText)
-						{
-							PrePaginated.x += brac.AggregateLengthBelowLine;
-							brac.PaginatedText.push_back(PrePaginated);
-						}
-						brac.AggregateLengthBelowLine += vecBrackets[bracId].AggregateLengthBelowLine;
-					}
-					else
-					{
-						for (sSpaceText PrePaginated : vecBrackets[bracId].PaginatedText)
-						{
-							PrePaginated.x += brac.AggregateLengthAboveLine;
-							brac.PaginatedText.push_back(PrePaginated);
-						}
-						brac.AggregateLengthAboveLine += vecBrackets[bracId].AggregateLengthAboveLine;
-					}
-					vecBrackets[bracId].bCopied = true;
-					//ScreenOutputFlag1 += " Copied ";
-				}
+				PrePaginated.y -= brac.nTotalHeight / 4;
+				brac.PaginatedText.push_back(PrePaginated);
 			}
-
-			//ExponentStr = BracketStr.substr(nStartOfExponent + 1, (bbCounter - nStartOfExponent) - 2);
-			ExponentStr = BracketStr.substr(2, nEndOfExponent - 2);
-
-			ScreenOutputFlag4 += " " + BracketStr.substr(0, nEndOfExponent);
-
-			if (ExponentStr != "1")
-			{
-				sSpaceText MyExp;
-				MyExp.str = ExponentStr;
-				MyExp.nFontSize = 4;
-				MyExp.x = ScreenWidth() + AggregateLen;
-				MyExp.y = (ScreenHeight() / 2) - 16;
-				MyExp.dx = -200;
-				//vecPaginatedText.push_back(MyExp);
-				brac.PaginatedText.push_back(MyExp);
-			}
-			brac.bPaginated = true;
 		}
 
+		//
+		// Paginate Exponent
+		//
+		for (sSpaceText PrePaginated : brac.PrePaginatedExp)
+		{
+			WriteCounter++;
+			PrePaginated.x += brac.nTotalLength;
+			PrePaginated.y -= brac.nTotalHeight / 2;
+			brac.nTotalHeight += brac.nTotalHeight / 2;
+			brac.PaginatedText.push_back(PrePaginated);
+		}
+
+		if (brac.nAggLenAboveLineExp > brac.nAggLenBelowLineExp)
+		{
+			brac.nTotalLength += brac.nAggLenAboveLineExp;
+		}
+		else
+		{
+			brac.nTotalLength += brac.nAggLenBelowLineExp;
+		}
 	}
 
-	//bool DoubleCounted(Bracket bracOuter, int nIdbracInner)
-	//{
-	//	bool CountedDouble = false;
-	//
-	//	for()
-	//}
+
 
 	bool PaginateExpression(Bracket& brac, std::string StrToPaginate)
 	{
@@ -819,6 +1290,9 @@ public:
 	// So we call this function, it checks to see if there are any unpaginated brackets inside the bracket
 	// If there are it calls itself with the contained bracket; it then calls itself with the original bracket;
 	// It returns when no unpaginated brackets remain in the bracket.
+
+	// When considering expressions in exponent we would like to see the order of pagination
+
 		LoopCount++;
 
 		bool ContainedBracketsExhausted = true;
@@ -840,11 +1314,11 @@ public:
 			}
 		}
 
-
 		if (ContainedBracketsExhausted == true)
 		{
 			PaginateBracket(brac, StrToPaginate);
 			brac.bPaginated = true;
+			ScreenOutputFlag2 += " " + std::to_string(brac.nId);
 			return true;
 		}
 		else
@@ -858,64 +1332,208 @@ public:
 			}
 			PaginateExpression(brac, StrToPaginate);
 		}
-			
+	}
+
+	void EvaluateBracket(Bracket& brac, std::string StrToEvaluate)
+	{
+		std::string VarString;
+		std::string ExponentStr;
+		int nLenExpStr;
+		int nLenVarStr;
+
+		//Arguably this should be inside the if clause below
+		nLenExpStr = brac.nPosCExpBrac - (brac.nPosOExpBrac + 1);
+		brac.sExponentialString = StrToEvaluate.substr(brac.nPosOExpBrac + 1, nLenExpStr);
+
+		nLenVarStr = brac.nPosCBrac - (brac.nPosCExpBrac + 1);
+		VarString = StrToEvaluate.substr(brac.nPosCExpBrac + 1, nLenVarStr);
+
+		//
+		//	Case of a terminal bracket
+		//
+		brac.fEvaluation = 0;
+		brac.fExponentEvaluation = 0;
+		brac.fVariableEvaluation = 0;
+		brac.TermsInExponent.clear();
+		brac.TermsInVariable.clear();
+
+		vecDiagnostics.push_back(std::to_string(brac.nId));
+
+		if (brac.ContainedBrackets.empty() == true)
+		{
+			// We will need a vector of terms but we are just doing this for now
+			brac.fEvaluation = pow(std::stof(VarString) , std::stof(brac.sExponentialString));
+			vecDiagnostics.push_back(" Eval " + std::to_string(brac.fEvaluation));
+			//brac.bCopied = true;
+		}
+		else
+		{
+			//
+			//	Handle internal paginated brackets
+			//
+
+			int ExpTermCounter = 0;
+			int VarTermCounter = 0;
+
+			brac.TermsInExponent.push_back(1);
+			brac.TermsInVariable.push_back(1);
+
+			for (int bracId : brac.ContainedBrackets)
+			{
+
+				if (vecBrackets[bracId].bCopied == false)
+				{
+
+					//
+					//	Brackets in exponent
+					//
+
+					if (vecBrackets[bracId].nPosCBrac < brac.nPosCExpBrac)
+					{
+						//ScreenOutputFlag3 = " We have a bracket in the exponent";
+						//int TermCounter = 0;
+						//vecBrackets[bracId].Terms.push_back(1);
+						//if (vecBrackets[bracId].bCopied == false)
+						//{
+							//brac.TermsInExponent.push_back(1);
+						if (vecBrackets[bracId].bNewTerm == false)
+						{
+							brac.TermsInExponent[ExpTermCounter] = brac.TermsInExponent[ExpTermCounter] * vecBrackets[bracId].fEvaluation;
+						}
+						else
+						{
+							brac.TermsInExponent.push_back(1);
+							ExpTermCounter++;
+							brac.TermsInExponent[ExpTermCounter] = brac.TermsInExponent[ExpTermCounter] * vecBrackets[bracId].fEvaluation;
+						}
+						vecBrackets[bracId].bCopied = true;
+					//}
+					}
+					else
+					{
+
+						//if (vecBrackets[bracId].bCopied == false)
+						//{
+							//brac.TermsInVariable.push_back(1);
+							//int TermCounter = 0;
+						if (vecBrackets[bracId].bNewTerm == false)
+						{
+							brac.TermsInVariable[VarTermCounter] = brac.TermsInVariable[VarTermCounter] * vecBrackets[bracId].fEvaluation;
+						}
+						else
+						{
+							brac.TermsInVariable.push_back(1);
+							VarTermCounter++;
+							brac.TermsInVariable[VarTermCounter] = brac.TermsInVariable[VarTermCounter] * vecBrackets[bracId].fEvaluation;
+						}
+						vecBrackets[bracId].bCopied = true;
+						
+					//}
+					}
+				}
+				//int CheckCounter = 0;
+			}
+
+			brac.fEvaluation = 0;
+			brac.fExponentEvaluation = 0;
+			brac.fVariableEvaluation = 0;
+
+			for (auto a : brac.TermsInExponent)
+			{
+				brac.fExponentEvaluation = brac.fExponentEvaluation + a;
+				//vecDiagnostics.push_back(" Exp a = " + std::to_string(a));
+				//CheckCounter++;
+				//ScreenOutputFlag4 = " " + std::to_string(brac.fExponentEvaluation);
+				//ScreenOutputFlag5 = " " + std::to_string(a);
+			}
+
+			//brac.TermsInExponent.clear();
+
+			for (auto a : brac.TermsInVariable)
+			{
+				brac.fVariableEvaluation = brac.fVariableEvaluation + a;
+				//vecDiagnostics.push_back(" Var a = " + std::to_string(a));
+			}
+
+			//brac.TermsInVariable.clear();
+			brac.TermsInExponent.clear();
+			brac.TermsInVariable.clear();
+
+
+			if (brac.fExponentEvaluation == 0)
+			{
+				// Handle Exponent
+				brac.fExponentEvaluation = std::stof(brac.sExponentialString);
+			}
+
+			//if (brac.fVariableEvaluation == 1)
+			//{
+				// Handle Exponent
+			//	brac.fVariableEvaluation = std::stof(brac.s);
+			//}
+
+			brac.fEvaluation = pow(brac.fVariableEvaluation, brac.fExponentEvaluation);
+
+			vecDiagnostics.push_back(" Exp " + std::to_string(brac.fExponentEvaluation));
+			vecDiagnostics.push_back(" Var " + std::to_string(brac.fVariableEvaluation));
+			vecDiagnostics.push_back(" Eval " + std::to_string(brac.fEvaluation));
+			//ScreenOutputFlag4 = " " + std::to_string(brac.fExponentEvaluation);
+			//ScreenOutputFlag5 = " " + std::to_string(brac.fVariableEvaluation);
+
+			//ScreenOutputFlag5 = std::to_string(CheckCounter);
+		}
 
 	}
 
-	void LaunchPagination2(std::string StrToPaginate)
+	bool EvaluateExpression(Bracket& brac, std::string StrToEvaluate)
 	{
-		std::stringstream StrToChunk(StrToPaginate);
+		LoopCount++;
 
-		std::string Chunk;
+		bool ContainedBracketsExhausted = true;
 
-		int nNumChunks = 0;
-		int nLenChunk = 0;
-		int nAggregateLenChunks = 0;
-		int bloodyCounter = 0;
-
-		while (getline(StrToChunk, Chunk, '+'))
+		if (brac.ContainedBrackets.empty() == true)
 		{
-			for (char a : Chunk)
-				nLenChunk++;
+			//ScreenOutputFlag3 = "Got Here";
+			ContainedBracketsExhausted = true;
+		}
+		else
+		{
+			for (auto& a : brac.ContainedBrackets)
+			{
 
-			sSpaceText MyChunk;
-			MyChunk.str = Chunk;
-			MyChunk.nFontSize = 2;
-			//MyChunk.x = ScreenWidth() + (nNumChunks * 500);
-			MyChunk.x = ScreenWidth() + (nAggregateLenChunks * MyChunk.nFontSize * 8) + (nNumChunks * 100);
-			//if (bloodyCounter == 0)
-			//	ScreenOutputFlag1 = std::to_string(MyChunk.x);
-			//if (bloodyCounter == 1)
-			//	ScreenOutputFlag2 = std::to_string(MyChunk.x);
-			//if (bloodyCounter == 2)
-			//	ScreenOutputFlag3 = std::to_string(MyChunk.x);
-			//if (bloodyCounter == 3)
-			//	ScreenOutputFlag4 = std::to_string(MyChunk.x);
-			//if (bloodyCounter == 4)
-			//	ScreenOutputFlag5 = std::to_string(MyChunk.x);
+				if (vecBrackets[a].bEvaluated == false)
+				{
+					ContainedBracketsExhausted = false;
+				}
+			}
+		}
 
-
-			MyChunk.y = ScreenHeight() / 2;
-			MyChunk.dx = -200;
-			vecPaginatedText.push_back(MyChunk);
-
-			nAggregateLenChunks += nLenChunk;
-			nNumChunks++;
-			nLenChunk = 0;
-			bloodyCounter++;
+		if (ContainedBracketsExhausted == true)
+		{
+			EvaluateBracket(brac, StrToEvaluate);
+			brac.bEvaluated = true;
+			ScreenOutputFlag2 += " " + std::to_string(brac.nId);
+			return true;
+		}
+		else
+		{
+			for (auto& a : brac.ContainedBrackets)
+			{
+				if (vecBrackets[a].bEvaluated == false)
+				{
+					EvaluateExpression(vecBrackets[a], StrToEvaluate);
+				}
+			}
+			EvaluateExpression(brac, StrToEvaluate);
 		}
 	}
 
-	void LaunchPagination(std::string StrToPaginate)
+
+	void DisplayStrToPaginate(std::string StrToPaginate)
 	{
 		// stringstream class check1 
 		std::stringstream PlusPass(StrToPaginate);
-		//Here we see something - we are looking for Plusses of the same level of nesting
-		//Here for instance the least nested.
-		//So here we see some recursion - first we pass paginate the whole thing;
-		//Then it chops it up into the least nested terms
-		//Then we pass paginate each of those terms in turn, all of which it handles recursively.
-
+		
 		std::string intermediate;
 		nNumBrackets = 0;
 		nDepthBracketNesting = 0;
@@ -931,13 +1549,12 @@ public:
 			for (char a : intermediate)
 				nLenToken++;
 
-			
 			//Right so we are using font size 2 - so that should be 16 pixels
 			sSpaceText MyText;
 			MyText.str = intermediate;
 			MyText.nFontSize = 2;
 			MyText.x = ScreenWidth() + (8 * MyText.nFontSize * AggregateLen) + (100 * nNumToken);
-			MyText.y = ScreenHeight() / 2;
+			MyText.y = (ScreenHeight() / 2) + 150;
 			MyText.dx = -200;
 			vecPaginatedText.push_back(MyText);
 			 
@@ -945,16 +1562,13 @@ public:
 			MyFormatting.str = std::to_string(nLenToken);
 			MyFormatting.nFontSize = 2;
 			MyFormatting.x = ScreenWidth() + (8 * MyFormatting.nFontSize * AggregateLen) + (100 * nNumToken);
-			MyFormatting.y = (ScreenHeight() / 2) + 50;
+			MyFormatting.y = (ScreenHeight() / 2) + 200;
 			MyFormatting.dx = -200;
 			vecPaginatedText.push_back(MyFormatting);
 
 			nNumToken++;
 			AggregateLen += nLenToken;
 			nLenToken = 0;
-			//nDepthVariabeNesting;
-			//Right so it is leftmost deepest bracket time again - Paginate this with offsets and scales
-			//Then Work outwards.
 		}
 	}
 };
